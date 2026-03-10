@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nickname Analyzer v1.0 — Decoding the essence of your name</title>
+<meta name="description" content="Analisis kepribadian nama kamu secara instan menggunakan AI heuristik. Temukan energi, vibe, dan karakter tersembunyi di balik namamu."/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#195de6",
+          "primary-light": "#e8effe",
+          "background-light": "#f6f6f8",
+          "background-dark": "#111621",
+          "surface-dark": "#1c2333",
+          "border-dark": "#2a3548",
+        },
+        fontFamily: { "display": ["Inter", "sans-serif"] },
+        borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px" },
+        keyframes: {
+          'fade-up': { '0%': { opacity: '0', transform: 'translateY(16px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+          'bar-grow': { '0%': { width: '0%' }, '100%': { width: 'var(--target-width)' } },
+          'count-up': { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+          'pulse-ring': { '0%': { transform: 'scale(1)', opacity: '0.6' }, '100%': { transform: 'scale(1.4)', opacity: '0' } },
+          'float': { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-6px)' } },
+        },
+        animation: {
+          'fade-up': 'fade-up 0.5s ease-out both',
+          'float': 'float 3s ease-in-out infinite',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  * { font-family: 'Inter', sans-serif; }
+
+  /* Progress bar animation */
+  .bar-animated { transition: width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+  /* Stagger fade-up for result cards */
+  .result-card { opacity: 0; transform: translateY(16px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .result-card.visible { opacity: 1; transform: translateY(0); }
+
+  /* Typing cursor effect */
+  .typing::after { content: '|'; animation: blink 0.9s step-end infinite; margin-left: 2px; color: #195de6; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* Gradient text */
+  .gradient-text { background: linear-gradient(135deg, #195de6, #7c3aed, #db2777); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .dark ::-webkit-scrollbar-thumb { background: #2a3548; }
+
+  /* Energy bar glow */
+  .energy-bar-fill { background: linear-gradient(90deg, #195de6, #7c3aed); box-shadow: 0 0 12px rgba(25,93,230,0.4); }
+
+  /* Trait badge */
+  .trait-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; }
+
+  /* Input focus ring */
+  #nameInput:focus { outline: none; }
+
+  /* Pulse ring on icon */
+  .pulse-ring::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid #195de6; animation: pulse-ring 1.8s ease-out infinite; }
+  @keyframes pulse-ring { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.6); opacity: 0; } }
+
+  /* Stars rating */
+  .star { color: #e2e8f0; font-size: 18px; transition: color 0.2s; }
+  .star.filled { color: #f59e0b; }
+
+  /* Mini stat row */
+  .stat-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid; }
+  .dark .stat-row { border-color: #2a3548; }
+  .stat-row { border-color: #e2e8f0; }
+
+  /* Shimmer loading */
+  @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+  .shimmer { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 400px 100%; animation: shimmer 1.2s ease-in-out infinite; border-radius: 6px; }
+  .dark .shimmer { background: linear-gradient(90deg, #1c2333 25%, #2a3548 50%, #1c2333 75%); background-size: 400px 100%; }
+
+  /* Confetti particle (cosmetic) */
+  .confetti { pointer-events: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 999; }
+</style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-300">
+
+<!-- Dark Mode Toggle -->
+<button id="darkToggle" onclick="toggleDark()" class="fixed top-4 right-4 z-50 w-10 h-10 rounded-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-sm flex items-center justify-center hover:scale-110 transition-transform">
+  <span class="material-symbols-outlined text-xl text-slate-500 dark:text-slate-400" id="darkIcon">dark_mode</span>
+</button>
+
+<!-- ───────────────────────  MAIN WRAPPER  ─────────────────────── -->
+<div class="min-h-screen flex flex-col">
+  <div class="px-4 md:px-20 lg:px-40 flex flex-1 justify-center py-5">
+    <div class="flex flex-col max-w-[860px] w-full flex-1">
+
+      <!-- HEADER -->
+      <header class="flex items-center justify-between border-b border-slate-200 dark:border-border-dark px-4 md:px-10 py-4 mb-8">
+        <div class="flex items-center gap-3 text-primary">
+          <span class="material-symbols-outlined text-3xl" style="font-variation-settings:'FILL' 1">fingerprint</span>
+          <h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight">Nickname Analyzer <span class="text-primary">v1.0</span></h2>
+        </div>
+        <span class="hidden sm:inline text-[11px] font-semibold text-slate-400 dark:text-slate-600 bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-border-dark px-3 py-1 rounded-full uppercase tracking-wide">AI-Powered</span>
+      </header>
+
+      <!-- HERO -->
+      <div class="flex flex-col items-center text-center gap-6 px-4 py-6 md:py-12">
+        <!-- Animated icon -->
+        <div class="relative w-20 h-20 flex items-center justify-center">
+          <div class="w-20 h-20 rounded-full bg-primary-light dark:bg-primary/10 flex items-center justify-center pulse-ring" style="position:relative;">
+            <span class="material-symbols-outlined text-4xl text-primary" style="font-variation-settings:'FILL' 1">psychology</span>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-3 max-w-2xl">
+          <h1 class="text-slate-900 dark:text-slate-100 text-4xl font-black leading-tight tracking-tight md:text-6xl">
+            Decoding the <span class="gradient-text">essence</span><br/>of your name
+          </h1>
+          <p class="text-slate-500 dark:text-slate-400 text-base md:text-lg font-normal leading-relaxed">
+            AI heuristik kami menganalisis struktur fonetik, pola suku kata, dan energi alfabet namamu — secara instan, tanpa API.
+          </p>
+        </div>
+
+        <!-- INPUT BOX -->
+        <div class="w-full max-w-[540px] mt-2">
+          <div class="flex w-full flex-col sm:flex-row gap-3 items-stretch rounded-2xl p-2 bg-white dark:bg-surface-dark shadow-lg border border-slate-200 dark:border-border-dark">
+            <div class="flex flex-1 items-center px-4 gap-3">
+              <span class="material-symbols-outlined text-slate-400">badge</span>
+              <input
+                class="flex w-full border-none bg-transparent focus:ring-0 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 px-0 text-base font-medium"
+                id="nameInput"
+                placeholder="Masukkan nama kamu..."
+                autocomplete="off"
+                spellcheck="false"
+                maxlength="60"
+              />
+            </div>
+            <button
+              id="analyzeBtn"
+              class="flex min-w-[140px] cursor-pointer items-center justify-center gap-2 rounded-xl h-12 px-6 bg-primary text-white text-sm font-bold transition-all hover:bg-blue-700 active:scale-95 shadow-sm"
+            >
+              <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1">bolt</span>
+              <span>LIHAT HASIL</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 dark:text-slate-600 mt-2">Coba: <button onclick="quickFill('Aris Syahmi')" class="hover:text-primary underline transition-colors">Aris Syahmi</button> · <button onclick="quickFill('Zara')" class="hover:text-primary underline transition-colors">Zara</button> · <button onclick="quickFill('Max Xavier')" class="hover:text-primary underline transition-colors">Max Xavier</button></p>
+        </div>
+      </div>
+
+      <!-- LOADING STATE (hidden by default) -->
+      <div id="loadingArea" class="hidden mt-8 px-4 space-y-5">
+        <div class="shimmer h-6 w-48"></div>
+        <div class="shimmer h-3 w-full"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div class="shimmer h-28 w-full rounded-xl"></div>
+          <div class="shimmer h-28 w-full rounded-xl"></div>
+          <div class="shimmer h-28 w-full rounded-xl"></div>
+          <div class="shimmer h-28 w-full rounded-xl"></div>
+        </div>
+      </div>
+
+      <!-- RESULTS SECTION (hidden by default) -->
+      <div id="resultsArea" class="hidden mt-8 px-4 space-y-8 pb-12">
+
+        <!-- Section header -->
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-border-dark pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-1 h-6 bg-primary rounded-full"></div>
+            <h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold tracking-tight uppercase">Analisis Identitas</h2>
+          </div>
+          <span class="text-xs font-semibold text-primary bg-primary-light dark:bg-primary/10 px-3 py-1 rounded-full" id="nameTag">—</span>
+        </div>
+
+        <!-- ENERGY BAR CARD -->
+        <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:0ms">
+          <div class="flex justify-between items-end mb-4">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">Energi Nama</p>
+              <p class="text-primary text-sm font-semibold" id="energyLabel">High Potential</p>
+            </div>
+            <p class="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tighter" id="energyValue">0%</p>
+          </div>
+          <div class="h-2 w-full bg-slate-100 dark:bg-border-dark rounded-full overflow-hidden">
+            <div class="h-full energy-bar-fill bar-animated rounded-full" id="energyBar" style="width: 0%;"></div>
+          </div>
+          <!-- Mini stats row -->
+          <div class="mt-5 grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p class="text-2xl font-black text-slate-900 dark:text-slate-100" id="statVowels">0</p>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Vokal</p>
+            </div>
+            <div>
+              <p class="text-2xl font-black text-slate-900 dark:text-slate-100" id="statConsonants">0</p>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Konsonan</p>
+            </div>
+            <div>
+              <p class="text-2xl font-black text-slate-900 dark:text-slate-100" id="statLength">0</p>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Karakter</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIBE + CHARACTER GRID -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+          <!-- Vibe Card -->
+          <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:80ms">
+            <span class="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-wider">Vibe</span>
+            <div class="flex items-center gap-3 mt-3">
+              <span class="material-symbols-outlined text-3xl text-primary" style="font-variation-settings:'FILL' 1" id="vibeIcon">auto_awesome</span>
+              <p class="text-slate-900 dark:text-slate-100 text-xl font-bold" id="vibeLabel">—</p>
+            </div>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mt-3 leading-relaxed" id="vibeDesc">—</p>
+          </div>
+
+          <!-- Character Card -->
+          <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:160ms">
+            <span class="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-wider">Karakter</span>
+            <p class="text-slate-700 dark:text-slate-300 text-sm mt-3 leading-relaxed" id="characterDesc">—</p>
+            <!-- Star rating -->
+            <div class="flex gap-1 mt-4" id="starRating"></div>
+          </div>
+
+          <!-- Archetype Card -->
+          <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:240ms">
+            <span class="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-wider">Arketipe</span>
+            <div class="mt-3 flex items-start gap-3">
+              <span class="material-symbols-outlined text-3xl text-violet-500" style="font-variation-settings:'FILL' 1" id="archetypeIcon">person</span>
+              <div>
+                <p class="text-slate-900 dark:text-slate-100 text-base font-bold" id="archetypeLabel">—</p>
+                <p class="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed" id="archetypeDesc">—</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Traits Card -->
+          <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:320ms">
+            <span class="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-wider">Sifat Dominan</span>
+            <div class="flex flex-wrap gap-2 mt-4" id="traitBadges"></div>
+          </div>
+        </div>
+
+        <!-- COMPATIBILITY + NUMEROLOGY ROW -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+          <!-- Numerology -->
+          <div class="result-card p-6 rounded-2xl border border-primary/30 bg-primary-light dark:bg-primary/5" style="transition-delay:400ms">
+            <span class="text-primary text-xs font-bold uppercase tracking-wider">Numerologi Nama</span>
+            <div class="flex items-end gap-3 mt-3">
+              <p class="text-6xl font-black text-primary" id="numNumber">—</p>
+              <div class="pb-1">
+                <p class="text-slate-900 dark:text-slate-100 text-base font-bold" id="numLabel">—</p>
+                <p class="text-slate-500 dark:text-slate-400 text-xs" id="numDesc">—</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Best Match -->
+          <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:480ms">
+            <span class="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-wider">Cocok Dipanggil</span>
+            <div class="space-y-2 mt-3">
+              <div class="stat-row">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Nickname ideal</span>
+                <span class="text-sm font-bold text-slate-900 dark:text-slate-100" id="nickSuggestion">—</span>
+              </div>
+              <div class="stat-row">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Panggilan formal</span>
+                <span class="text-sm font-bold text-slate-900 dark:text-slate-100" id="formalSuggestion">—</span>
+              </div>
+              <div class="stat-row" style="border-bottom:none">
+                <span class="text-sm text-slate-600 dark:text-slate-400">Ending resonansi</span>
+                <span class="text-sm font-bold text-primary" id="resonanceType">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI INSIGHT FULL WIDTH -->
+        <div class="result-card p-6 rounded-2xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark" style="transition-delay:560ms">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="material-symbols-outlined text-base text-primary" style="font-variation-settings:'FILL' 1">smart_toy</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">AI Insight</span>
+          </div>
+          <p class="text-slate-700 dark:text-slate-300 text-sm leading-relaxed typing" id="aiInsight">—</p>
+        </div>
+
+        <!-- SHARE BUTTON -->
+        <div class="result-card flex flex-col sm:flex-row gap-3 pt-2" style="transition-delay:640ms">
+          <button onclick="copyResult()" class="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark hover:border-primary hover:text-primary transition-all text-sm font-semibold text-slate-600 dark:text-slate-300">
+            <span class="material-symbols-outlined text-base">content_copy</span> Salin Hasil
+          </button>
+          <button onclick="document.getElementById('nameInput').value='';document.getElementById('nameInput').focus();hideResults();" class="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark hover:border-primary hover:text-primary transition-all text-sm font-semibold text-slate-600 dark:text-slate-300">
+            <span class="material-symbols-outlined text-base">refresh</span> Coba Nama Lain
+          </button>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <footer class="mt-auto py-10 px-4 border-t border-slate-200 dark:border-border-dark text-center">
+        <p class="text-slate-400 dark:text-slate-600 text-xs font-medium">
+          Nickname Analyzer v1.0 — AI Heuristic Engine · No data leaves your browser 🔒
+        </p>
+      </footer>
+
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold px-5 py-3 rounded-full shadow-xl flex items-center gap-2 opacity-0 translate-y-2 transition-all duration-300 pointer-events-none">
+  <span class="material-symbols-outlined text-base" id="toastIcon">check_circle</span>
+  <span id="toastMsg">Disalin!</span>
+</div>
+
+<!-- ────────────────────── AI ENGINE ────────────────────── -->
+<script>
+// ═══════════════════════════ DATA BANK ═══════════════════════════
+
+const VIBES = [
+  { label: "Elegan & Modern",      icon: "diamond",         desc: "Nama ini memancarkan kehalusan dan kecanggihan yang natural — mudah diingat sekaligus berkesan." },
+  { label: "Klasik & Berwibawa",   icon: "account_balance", desc: "Mengandung bobot tradisi dan kepercayaan. Orang cenderung menaruh rasa hormat lebih awal." },
+  { label: "Energik & Ceria",      icon: "wb_sunny",        desc: "Resonansi yang cerah dan optimistis. Nama ini membawa semangat ke setiap ruangan yang dimasuki." },
+  { label: "Tenang & Misterius",   icon: "nights_stay",     desc: "Ada kedalaman yang tidak mudah terbaca — justru inilah daya tariknya yang paling kuat." },
+  { label: "Kreatif & Unik",       icon: "palette",         desc: "Struktur fonetik yang jarang, mencerminkan jiwa yang senang berpikir di luar batas konvensi." },
+  { label: "Minimalis & Bersih",   icon: "spa",             desc: "Simpel, tepat, dan powerful. Tidak ada kata yang terbuang — seperti desain premium." },
+  { label: "Tangguh & Berani",     icon: "shield",          desc: "Hentakan konsonannya membangun aura ketegasan yang alami. Cocok untuk pemimpin." },
+  { label: "Hangat & Ramah",       icon: "favorite",        desc: "Vokal yang terbuka menciptakan vibrasi yang inklusif — orang langsung merasa nyaman." },
+];
+
+const ARCHETYPES = [
+  { label: "The Visioner",  icon: "visibility",      desc: "Selalu melihat gambaran besar yang lebih luas dari orang sekitarnya." },
+  { label: "The Guardian",  icon: "local_police",    desc: "Pelindung alami — stabil, bisa diandalkan, dan teguh pada prinsip." },
+  { label: "The Creator",   icon: "brush",           desc: "Lahir untuk menghasilkan sesuatu yang baru dan bermakna bagi dunia." },
+  { label: "The Explorer",  icon: "travel_explore",  desc: "Jiwa petualang yang tidak pernah puas sebelum menemukan hal baru." },
+  { label: "The Sage",      icon: "school",          desc: "Penyerap pengetahuan — analitis, mendalam, dan penuh kebijaksanaan." },
+  { label: "The Hero",      icon: "military_tech",   desc: "Tidak gentar menghadapi tantangan. Maju terus bahkan saat yang lain mundur." },
+  { label: "The Jester",    icon: "mood",            desc: "Energi yang menyegarkan — membawa tawa dan perspektif segar ke mana pun pergi." },
+  { label: "The Ruler",     icon: "crown",           desc: "Pemimpin bawaan. Karisma dan ketenangan dalam mengambil keputusan adalah senjata utamanya." },
+];
+
+const TRAITS_POOL = [
+  { label: "Percaya Diri",   color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800" },
+  { label: "Inovatif",       color: "bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800" },
+  { label: "Empatik",        color: "bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 border border-pink-200 dark:border-pink-800" },
+  { label: "Analitis",       color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800" },
+  { label: "Karismatik",     color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800" },
+  { label: "Adaptif",        color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800" },
+  { label: "Visioner",       color: "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800" },
+  { label: "Optimistis",     color: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800" },
+  { label: "Intuitif",       color: "bg-fuchsia-50 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400 border border-fuchsia-200 dark:border-fuchsia-800" },
+  { label: "Strategis",      color: "bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800" },
+  { label: "Kreatif",        color: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800" },
+  { label: "Teguh",          color: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700" },
+];
+
+const NUMEROLOGY = [
+  { num: 1, label: "The Leader",   desc: "Pionir, mandiri, dan penuh inisiatif." },
+  { num: 2, label: "The Diplomat", desc: "Harmonis, peka, dan mediator alami." },
+  { num: 3, label: "The Artist",   desc: "Ekspresif, kreatif, dan penuh keceriaan." },
+  { num: 4, label: "The Builder",  desc: "Disiplin, terstruktur, dan dapat diandalkan." },
+  { num: 5, label: "The Explorer", desc: "Bebas, petualang, dan adaptif." },
+  { num: 6, label: "The Healer",   desc: "Peduli, bertanggung jawab, dan penuh kasih." },
+  { num: 7, label: "The Seeker",   desc: "Analitis, spiritual, dan penuh misteri." },
+  { num: 8, label: "The Achiever", desc: "Ambisius, pragmatis, dan berorientasi hasil." },
+  { num: 9, label: "The Sage",     desc: "Bijaksana, dermawan, dan berpikiran luas." },
+];
+
+const CHARACTERS = [
+  "Struktur nama ini memiliki keseimbangan fonetik yang langka — konsonan dan vokalnya berjalan harmonis, menciptakan kesan yang kuat sekaligus mudah diingat di memori jangka panjang.",
+  "Resonansi alfabet dalam nama ini memancarkan aura kepemimpinan bawaan. Orang yang menyebut nama ini cenderung secara otomatis memberikan rasa hormat lebih awal.",
+  "Pola suku kata yang dimiliki nama ini sangat kaya secara fonetis — membuatnya terdengar unik namun tetap accessible, perpaduan sempurna antara kreativitas dan keterbacaan.",
+  "Ada ketenangan mendalam yang tertanam dalam struktur nama ini. Bukan berarti pasif, justru sebaliknya — ketenangan itu adalah sumber kekuatan dan stabilitas yang tidak mudah tergoyahkan.",
+  "Nama ini memiliki 'hook effect' — begitu didengar, sulit untuk tidak mengingatnya. Ini adalah aset personal branding yang sangat berharga di era modern.",
+  "Kombinasi huruf dalam nama ini menciptakan gelombang suara yang dinamis. Dalam dunia fonetik, nama seperti ini sering dikaitkan dengan individu yang mudah membangun koneksi sosial.",
+];
+
+const AI_INSIGHTS = [
+  n => `"${n}" memiliki pola fonetik yang menempatkannya pada kategori nama yang —secara psikologis— paling mudah diterima oleh kelompok sosial baru. Kombinasi bunyi terbuka dan tertutupnya menciptakan keseimbangan antara keramahan dan ketegasan yang jarang ditemukan.`,
+  n => `Analisis linguistik menunjukkan bahwa "${n}" termasuk dalam klaster nama dengan resonansi tinggi. Studi persepsi nama menemukan bahwa nama dengan pola serupa cenderung dikaitkan dengan kemampuan kepemimpinan dan kreativitas yang di atas rata-rata.`,
+  n => `"${n}" mengandung apa yang ahli onomastik sebut sebagai 'phonetic signature' yang kuat. Artinya, nama ini memiliki jejak bunyi yang cukup unik untuk dibedakan, namun cukup familiar untuk diterima — kombinasi ideal untuk membangun identitas yang berkesan.`,
+  n => `Dari perspektif numerologi dan fonetik, "${n}" adalah nama yang 'bergerak ke depan'. Setiap suku katanya mengandung energi progresif yang secara bawah sadar memotivasi pemiliknya untuk terus bergerak dan berkembang.`,
+  n => `AI kami mendeteksi bahwa "${n}" memiliki struktur yang mirip dengan nama-nama tokoh berpengaruh secara historis dalam kategorinya. Ini bukan kebetulan — ada pola universal dalam nama-nama yang 'berhasil' menembus batas dan dikenal luas.`,
+];
+
+// ═══════════════════════════ HYBRID AI ENGINE ═══════════════════════════
+
+// Simple LCG for deterministic output per name
+function seededRandom(seed) {
+  let s = seed;
+  return function() {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+// Global pipeline ready state
+let extractor = null;
+let vibeEmbeddingsCache = [];
+let charEmbeddingsCache = [];
+let cosineSim = null;
+
+// Initialize Transformers.js
+async function initAI() {
+  const btn = document.getElementById('analyzeBtn');
+  const originalText = btn.innerHTML;
+  
+  try {
+    btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span><span>LOADING AI...</span>`;
+    btn.disabled = true;
+
+    // Load Transformers.js dynamically. 
+    // This approach avoids cross-origin Web Worker issues when opened via file:///
+    const transformers = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+    
+    // Configure environment for browser execution (especially for file:/// access)
+    transformers.env.allowLocalModels = false;
+    transformers.env.backends.onnx.wasm.numThreads = 1; // Prevent Worker errors
+
+    extractor = await transformers.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+      progress_callback: (x) => {
+        if (x.status === 'downloading' || x.status === 'init') {
+          btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span><span class="text-xs">DL MODEL ${Math.round(x.progress || 0)}%</span>`;
+        }
+      }
+    });
+
+    cosineSim = transformers.cosineSimilarity;
+
+    // Pre-compute embeddings for classes to make inference instant later
+    btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span><span class="text-[10px]">ANALYZING CONTEXT...</span>`;
+    
+    const vibeTexts = VIBES.map(v => v.label.toLowerCase() + " vibe impression");
+    const charTexts = CHARACTERS.map(c => c.toLowerCase());
+    
+    const vResult = await extractor(vibeTexts, { pooling: 'mean', normalize: true });
+    const cResult = await extractor(charTexts, { pooling: 'mean', normalize: true });
+    
+    vibeEmbeddingsCache = vResult.tolist();
+    charEmbeddingsCache = cResult.tolist();
+
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+    
+  } catch (err) {
+    console.warn("Transformers.js failed to load, falling back to pure heuristic", err);
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
+
+// Call init on load
+initAI();
+
+// The Hybrid Analyzer Function
+async function analyzeName(raw) {
+  const name  = raw.trim();
+  const lower = name.toLowerCase().replace(/\s+/g, '');
+  const clean = name.replace(/\s+/g, '');
+
+  let seedVal = 0;
+  for (let i = 0; i < name.length; i++) seedVal += name.charCodeAt(i) * (i + 1);
+  const rng = seededRandom(seedVal);
+  const r   = () => rng();
+
+  // ── Heuristics (Stats & Energy) ──
+  const vowels     = (lower.match(/[aiueo]/g) || []).length;
+  const consonants = (lower.match(/[bcdfghjklmnpqrstvwxyz]/g) || []).length;
+  const length     = clean.length;
+  const words      = name.trim().split(/\s+/).length;
+
+  let energy = 50;
+  if (length <= 4)       energy += 15;
+  else if (length <= 7)  energy += 10;
+  else if (length <= 10) energy += 5;
+  else                   energy -= 5;
+
+  const vowelRatio = vowels / (length || 1);
+  if (vowelRatio > 0.55)      energy += 12;
+  else if (vowelRatio > 0.40) energy += 8;
+  else if (vowelRatio < 0.25) energy += 5;
+
+  const powerLetters = (lower.match(/[sxzkr]/g) || []).length;
+  energy += Math.min(powerLetters * 4, 16);
+
+  const openVowels = (lower.match(/[ao]/g) || []).length;
+  energy += Math.min(openVowels * 2, 10);
+
+  if (words === 2) energy += 8;
+  const endsVowel = /[aiueo]$/i.test(clean);
+  if (endsVowel) energy += 5; else energy += 8;
+  energy = Math.max(40, Math.min(98, energy));
+
+  // ── AI Vibe & Character (Transformers fallback to heuristic) ──
+  let vibeIdx = 0;
+  let charIdx = 0;
+
+  if (extractor && vibeEmbeddingsCache.length > 0 && cosineSim) {
+    // 1. Get embedding for the user's name
+    const nameEmbeddingResult = await extractor(name.toLowerCase() + " vibe impression", { pooling: 'mean', normalize: true });
+    const nameVector = nameEmbeddingResult.tolist()[0];
+    
+    // 2. Compute similarity for Vibe
+    let bestVibeScore = -Infinity;
+    for (let i = 0; i < VIBES.length; i++) {
+      const score = cosineSim(nameVector, vibeEmbeddingsCache[i]);
+      if (score > bestVibeScore) { bestVibeScore = score; vibeIdx = i; }
+    }
+    
+    // 3. Compute similarity for Character
+    let bestCharScore = -Infinity;
+    for (let i = 0; i < CHARACTERS.length; i++) {
+      const score = cosineSim(nameVector, charEmbeddingsCache[i]);
+      if (score > bestCharScore) { bestCharScore = score; charIdx = i; }
+    }
+  } else {
+    // Fallback if AI hasn't loaded
+    vibeIdx = Math.floor(r() * VIBES.length);
+    charIdx = Math.floor(r() * CHARACTERS.length);
+  }
+
+  // ── Remainder stays heuristic ──
+  const archIdx    = Math.floor(r() * ARCHETYPES.length);
+  const insightIdx = Math.floor(r() * AI_INSIGHTS.length);
+
+  let numSum = 0;
+  for (const c of lower) {
+    const code = c.charCodeAt(0) - 96;
+    if (code > 0 && code <= 26) numSum += code;
+  }
+  while (numSum > 9) {
+    numSum = String(numSum).split('').reduce((a, d) => a + parseInt(d), 0);
+  }
+  if (numSum === 0) numSum = 9;
+
+  const traitCount = 3 + (energy > 70 ? 1 : 0);
+  const traitIndices = [];
+  const traitsRng = seededRandom(seedVal + 7);
+  while (traitIndices.length < traitCount) {
+    const idx = Math.floor(traitsRng() * TRAITS_POOL.length);
+    if (!traitIndices.includes(idx)) traitIndices.push(idx);
+  }
+
+  const stars = energy >= 85 ? 5 : energy >= 72 ? 4 : 3;
+  const firstName  = name.trim().split(/\s+/)[0];
+  const nickShort  = firstName.length > 4 ? firstName.substring(0, Math.ceil(firstName.length / 2)) : firstName;
+  const formalName = words > 1 ? name.trim().split(/\s+/).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ') : name;
+  const resonance  = endsVowel ? 'Open (Terbuka & Harmonis)' : 'Closed (Tegas & Profesional)';
+  const eLabel = energy >= 85 ? 'Elite Level' : energy >= 72 ? 'High Potential' : energy >= 58 ? 'Balanced Energy' : 'Steady Foundation';
+
+  return {
+    energy, eLabel, vowels, consonants, length,
+    vibe: VIBES[vibeIdx],
+    archetype: ARCHETYPES[archIdx],
+    character: CHARACTERS[charIdx],
+    insight: AI_INSIGHTS[insightIdx](name),
+    numerology: NUMEROLOGY[numSum - 1],
+    traits: traitIndices.map(i => TRAITS_POOL[i]),
+    stars,
+    nickShort, formalName, resonance,
+  };
+}
+
+// ═══════════════════════════ UI LOGIC ═══════════════════════════
+
+function showResults() {
+  document.getElementById('resultsArea').classList.remove('hidden');
+  document.querySelectorAll('.result-card').forEach((el, i) => {
+    setTimeout(() => el.classList.add('visible'), 60 + i * 80);
+  });
+}
+
+function hideResults() {
+  document.getElementById('resultsArea').classList.add('hidden');
+  document.querySelectorAll('.result-card').forEach(el => el.classList.remove('visible'));
+}
+
+function renderStars(count) {
+  let html = '';
+  for (let i = 1; i <= 5; i++) {
+    html += `<span class="material-symbols-outlined star ${i <= count ? 'filled' : ''}" style="font-variation-settings:'FILL' ${i<=count?1:0};font-size:20px">star</span>`;
+  }
+  return html;
+}
+
+// Use Async since Transformers prediction is async
+async function runAnalysis() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { flashInput(); return; }
+
+  // Check if AI is still downloading models
+  if (document.getElementById('analyzeBtn').disabled) {
+    showToast('AI Model masih didownload (sekitar 25MB), tunggu sebentar...', 'sync');
+    return;
+  }
+
+  document.getElementById('loadingArea').classList.remove('hidden');
+  hideResults();
+
+  // Run AI analysis
+  const r = await analyzeName(name);
+
+  // Output mappings
+  document.getElementById('loadingArea').classList.add('hidden');
+  document.getElementById('nameTag').textContent = name.toUpperCase();
+
+  document.getElementById('energyValue').textContent = r.energy + '%';
+  document.getElementById('energyLabel').textContent  = r.eLabel;
+  document.getElementById('statVowels').textContent      = r.vowels;
+  document.getElementById('statConsonants').textContent  = r.consonants;
+  document.getElementById('statLength').textContent      = r.length;
+  setTimeout(() => { document.getElementById('energyBar').style.width = r.energy + '%'; }, 50);
+
+  document.getElementById('vibeLabel').textContent = r.vibe.label;
+  document.getElementById('vibeIcon').textContent  = r.vibe.icon;
+  document.getElementById('vibeDesc').textContent  = r.vibe.desc;
+
+  document.getElementById('characterDesc').textContent = r.character;
+  document.getElementById('starRating').innerHTML = renderStars(r.stars);
+
+  document.getElementById('archetypeLabel').textContent = r.archetype.label;
+  document.getElementById('archetypeIcon').textContent  = r.archetype.icon;
+  document.getElementById('archetypeDesc').textContent  = r.archetype.desc;
+
+  document.getElementById('traitBadges').innerHTML = r.traits
+    .map(t => `<span class="trait-badge ${t.color}">${t.label}</span>`)
+    .join('');
+
+  document.getElementById('numNumber').textContent = r.numerology.num;
+  document.getElementById('numLabel').textContent  = r.numerology.label;
+  document.getElementById('numDesc').textContent   = r.numerology.desc;
+
+  document.getElementById('nickSuggestion').textContent  = r.nickShort || name;
+  document.getElementById('formalSuggestion').textContent = r.formalName;
+  document.getElementById('resonanceType').textContent    = r.resonance;
+
+  document.getElementById('aiInsight').textContent = r.insight;
+
+  showResults();
+  setTimeout(() => {
+    document.getElementById('resultsArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 300);
+}
+
+function flashInput() {
+  const input = document.getElementById('nameInput');
+  input.parentElement.parentElement.classList.add('border-red-400');
+  input.placeholder = 'Masukkan nama dulu ya...';
+  setTimeout(() => {
+    input.parentElement.parentElement.classList.remove('border-red-400');
+    input.placeholder = 'Masukkan nama kamu...';
+  }, 1500);
+}
+
+function quickFill(name) {
+  document.getElementById('nameInput').value = name;
+  runAnalysis();
+}
+
+function copyResult() {
+  const name     = document.getElementById('nameInput').value.trim();
+  const energy   = document.getElementById('energyValue').textContent;
+  const vibe     = document.getElementById('vibeLabel').textContent;
+  const char     = document.getElementById('characterDesc').textContent;
+  const arch     = document.getElementById('archetypeLabel').textContent;
+  const insight  = document.getElementById('aiInsight').textContent;
+
+  const text = `🔍 Nickname Analyzer v1.0 — Hasil Analisis "${name}"\n\n` +
+    `⚡ Energi Nama: ${energy}\n` +
+    `✨ Vibe: ${vibe}\n` +
+    `🎭 Arketipe: ${arch}\n` +
+    `📝 Karakter: ${char}\n\n` +
+    `🤖 AI Insight:\n${insight}\n\n` +
+    `— Dianalisis oleh Nickname Analyzer v1.0 (Powered by Transformers.js)`;
+
+  navigator.clipboard.writeText(text).then(() => showToast('Hasil disalin ke clipboard!', 'check_circle'));
+}
+
+function showToast(msg, icon = 'check_circle') {
+  const toast = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent  = msg;
+  document.getElementById('toastIcon').textContent = icon;
+  toast.style.opacity   = '1';
+  toast.style.transform = 'translateX(-50%) translateY(0)';
+  setTimeout(() => {
+    toast.style.opacity   = '0';
+    toast.style.transform = 'translateX(-50%) translateY(8px)';
+  }, 2500);
+}
+
+// ── Dark mode ──
+function toggleDark() {
+  const html = document.documentElement;
+  html.classList.toggle('dark');
+  document.getElementById('darkIcon').textContent = html.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+  localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+}
+// Load saved preference
+if (localStorage.getItem('theme') === 'dark' ||
+   (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+  document.documentElement.classList.add('dark');
+  document.getElementById('darkIcon').textContent = 'light_mode';
+}
+
+// ── Event listeners ──
+document.getElementById('analyzeBtn').addEventListener('click', runAnalysis);
+document.getElementById('nameInput').addEventListener('keypress', e => { if (e.key === 'Enter') runAnalysis(); });
+</script>
+</body>
+</html>
